@@ -1,4 +1,5 @@
-from fastapi import APIRouter
+from fastapi import APIRouter, HTTPException
+from app.db import check_database_connection
 
 router = APIRouter()
 
@@ -7,5 +8,11 @@ async def health_check():
     return {"status": "ok"}
 
 @router.get("/ready")
-async def ready_check():
+def ready_check():
+    if not check_database_connection():
+        raise HTTPException(
+            status_code=503,
+            detail="Database connection error."
+            )
+    
     return {"status": "ready"}
