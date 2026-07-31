@@ -18,6 +18,7 @@ htmlcov/
 
 # IDE and editor settings
 .vscode/
+pyrefly.toml
 
 # Operating system files
 .DS_Store
