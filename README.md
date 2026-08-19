@@ -1,6 +1,6 @@
 # Uptime Sentinel
 
-Uptime Sentinel is a self-hosted uptime monitoring platform built as a practical DevOps portfolio project.
+Uptime Sentinel is a self-hosted uptime monitoring platform.
 
 The project is under active development. The current version provides a FastAPI backend, PostgreSQL persistence, monitor CRUD operations, health checks, database readiness checks, Alembic migrations, and a Docker Compose development environment.
 
