@@ -1,7 +1,8 @@
 from datetime import datetime
-from sqlalchemy import Boolean, DateTime, Integer, String, func
+from sqlalchemy import Boolean, DateTime, Integer, String, func, ForeignKey, Text
 from sqlalchemy.orm import Mapped, mapped_column
 from app.db import Base
+
 
 class Monitor(Base):
     __tablename__ = "monitors"
@@ -24,3 +25,23 @@ class Monitor(Base):
         nullable=False, 
         server_default=func.now()
         )
+
+class CheckResult(Base):
+    __tablename__ = "check_results"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    monitor_id: Mapped[int] = mapped_column(
+        ForeignKey("monitors.id", ondelete="CASCADE"), 
+        nullable=False,
+        index=True
+    )
+    status: Mapped[str] = mapped_column(String(20), nullable=False)
+    status_code: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    latency_ms: Mapped[int] = mapped_column(Integer, nullable=False)
+    error: Mapped[str | None] = mapped_column(Text, nullable=True)
+    checked_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        server_default=func.now()
+    )
+    

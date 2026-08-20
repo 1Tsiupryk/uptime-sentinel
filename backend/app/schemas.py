@@ -1,3 +1,4 @@
+from typing import Literal
 from datetime import datetime
 from pydantic import BaseModel, ConfigDict, Field, HttpUrl
 
@@ -26,3 +27,13 @@ class MonitorUpdate(BaseModel):
     expected_status_code: int | None = Field(default=None, ge=100, le=599)
     enabled: bool | None = None
 
+class CheckResultRead(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    monitor_id: int
+    status: Literal["up", "down"]
+    status_code: int | None
+    latency_ms: int
+    error: str | None
+    checked_at: datetime
