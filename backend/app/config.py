@@ -1,7 +1,7 @@
 from functools import lru_cache
 from typing_extensions import Literal 
 from pydantic_settings import BaseSettings, SettingsConfigDict
-from pydantic import PostgresDsn, computed_field
+from pydantic import Field, PostgresDsn, computed_field
 
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(
@@ -12,8 +12,10 @@ class Settings(BaseSettings):
 
     ENVIRONMENT: Literal["local", "staging", "production"] = "local"
 
-    # Database settings
+    #Worker settings
+    WORKER_POLL_INTERVAL_SECONDS: int = Field(default=5, ge=1, le=300)
 
+    # Database settings
     PROJECT_NAME: str
     POSTGRES_SERVER: str
     POSTGRES_PORT: int

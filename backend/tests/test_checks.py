@@ -31,7 +31,7 @@ def test_trigger_check_creates_result(client: TestClient, monkeypatch: pytest.Mo
     )
 
     monkeypatch.setattr(
-        "app.api.checks.check_monitor",
+        "app.services.check_runner.check_monitor",
         mock_check,
     )
 
@@ -53,7 +53,7 @@ def test_trigger_check_creates_result(client: TestClient, monkeypatch: pytest.Mo
 
 def test_trigger_check_for_missing_monitor_returns_404(client: TestClient, monkeypatch: pytest.MonkeyPatch) -> None:
     mock_check = Mock()
-    monkeypatch.setattr("app.api.checks.check_monitor", mock_check)
+    monkeypatch.setattr("app.services.check_runner.check_monitor", mock_check)
 
     response = client.post("/monitors/999/check")
 
@@ -90,7 +90,7 @@ def test_get_checks_returns_newest_first(client: TestClient, monkeypatch: pytest
     )
 
     monkeypatch.setattr(
-        "app.api.checks.check_monitor",
+        "app.services.check_runner.check_monitor",
         mock_check,
     )
 
