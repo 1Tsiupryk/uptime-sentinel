@@ -15,6 +15,13 @@ class Settings(BaseSettings):
     #Worker settings
     WORKER_POLL_INTERVAL_SECONDS: int = Field(default=5, ge=1, le=300)
 
+    #Redis settings
+    REDIS_HOST: str = "redis"
+    REDIS_PORT: int = 6379
+    REDIS_DB: int = Field(default=0, ge=0)
+    REDIS_SOCKET_TIMEOUT_SECONDS: int = Field(default=2, ge=1, le=30)
+    REDIS_LOCK_TIMEOUT_SECONDS: int = Field(default=90, ge=61, le=3600)
+
     # Database settings
     PROJECT_NAME: str
     POSTGRES_SERVER: str

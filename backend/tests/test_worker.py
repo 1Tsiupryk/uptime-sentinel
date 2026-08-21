@@ -1,23 +1,31 @@
-from datetime import datetime, timedelta, timezone
-from unittest.mock import Mock
-import logging
-import pytest
-from sqlalchemy.orm import Session, sessionmaker
-
-from app.models import CheckResult, Monitor
 import logging
 import signal
 
+from datetime import datetime, timedelta, timezone
 from threading import Event
 from types import SimpleNamespace
 from unittest.mock import Mock
 
+import pytest
+from sqlalchemy.orm import Session, sessionmaker
+
+from app.models import CheckResult, Monitor
 from app.worker.run import (
     is_monitor_due,
     main,
     run_check_cycle,
     run_worker,
 )
+
+@pytest.fixture
+def redis_client() -> Mock:
+    client = Mock()
+    lock = Mock()
+
+    lock.acquire.return_value = True
+    client.lock.return_value = lock
+
+    return client
 
 def make_monitor(interval_seconds: int = 60, enabled: bool = True) -> Monitor:
     return Monitor(
@@ -82,7 +90,8 @@ def fake_check_result(monitor_id: int) -> CheckResult:
 
 def test_cycle_checks_enabled_monitor_without_history(
     db_session_factory: sessionmaker[Session],
-    monkeypatch: pytest.MonkeyPatch
+    redis_client: Mock,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     with db_session_factory() as db:
         monitor = make_monitor(enabled=True)
@@ -105,13 +114,97 @@ def test_cycle_checks_enabled_monitor_without_history(
         fake_run_monitor_check,
     )
 
-    run_check_cycle(db_session_factory)
+    run_check_cycle(
+        redis_client=redis_client,
+        lock_timeout_seconds=90,
+        session_factory=db_session_factory,
+    )
 
     assert checked_monitor_ids == [monitor_id]
 
+    lock = redis_client.lock.return_value
+    lock.acquire.assert_called_once_with(blocking=False)
+    lock.release.assert_called_once()
+
+def test_cycle_skips_monitor_when_lock_is_busy(
+    db_session_factory: sessionmaker[Session],
+    redis_client: Mock,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    with db_session_factory() as db:
+        monitor = make_monitor(enabled=True)
+        db.add(monitor)
+        db.commit()
+
+    lock = redis_client.lock.return_value
+    lock.acquire.return_value = False
+
+    mock_runner = Mock()
+
+    monkeypatch.setattr(
+        "app.worker.run.run_monitor_check",
+        mock_runner,
+    )
+
+    run_check_cycle(
+        redis_client=redis_client,
+        lock_timeout_seconds=90,
+        session_factory=db_session_factory,
+    )
+
+    mock_runner.assert_not_called()
+    lock.release.assert_not_called()
+
+def test_cycle_rechecks_due_status_after_acquiring_lock(
+    db_session_factory: sessionmaker[Session],
+    redis_client: Mock,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    with db_session_factory() as db:
+        monitor = make_monitor(interval_seconds=60)
+        db.add(monitor)
+        db.commit()
+        db.refresh(monitor)
+        monitor_id = monitor.id
+
+    recent_result = make_result(
+        checked_at=datetime.now(timezone.utc),
+        monitor_id=monitor_id,
+    )
+
+    mock_get_last_result = Mock(
+        side_effect=[
+            None,
+            recent_result,
+        ]
+    )
+    mock_runner = Mock()
+
+    monkeypatch.setattr(
+        "app.worker.run.get_last_check_result",
+        mock_get_last_result,
+    )
+    monkeypatch.setattr(
+        "app.worker.run.run_monitor_check",
+        mock_runner,
+    )
+
+    run_check_cycle(
+        redis_client=redis_client,
+        lock_timeout_seconds=90,
+        session_factory=db_session_factory,
+    )
+
+    assert mock_get_last_result.call_count == 2
+    mock_runner.assert_not_called()
+
+    lock = redis_client.lock.return_value
+    lock.release.assert_called_once()
+
 def test_cycle_skips_disabled_monitor(
     db_session_factory: sessionmaker[Session],
-    monkeypatch: pytest.MonkeyPatch
+    monkeypatch: pytest.MonkeyPatch,
+    redis_client: Mock,
 ) -> None:
     with db_session_factory() as db:
         db.add(make_monitor(enabled=False))
@@ -124,13 +217,17 @@ def test_cycle_skips_disabled_monitor(
         mock_runner,
     )
 
-    run_check_cycle(db_session_factory)
-
+    run_check_cycle(
+        redis_client=redis_client,
+        lock_timeout_seconds=90,
+        session_factory=db_session_factory,
+    )
     mock_runner.assert_not_called()
 
 def test_cycle_skips_monitor_that_is_not_due(
     db_session_factory: sessionmaker[Session],
     monkeypatch: pytest.MonkeyPatch,
+    redis_client: Mock,
 ) -> None:
     with db_session_factory() as db:
         monitor = make_monitor(interval_seconds=60)
@@ -153,14 +250,18 @@ def test_cycle_skips_monitor_that_is_not_due(
         mock_runner,
     )
 
-    run_check_cycle(db_session_factory)
-
+    run_check_cycle(
+        redis_client=redis_client,
+        lock_timeout_seconds=90,
+        session_factory=db_session_factory,
+    )
     mock_runner.assert_not_called()
 
 def test_cycle_continues_after_monitor_failure(
     db_session_factory: sessionmaker[Session],
     monkeypatch: pytest.MonkeyPatch,
     caplog: pytest.LogCaptureFixture,
+    redis_client: Mock,
 ) -> None:
     with db_session_factory() as db:
         first_monitor = make_monitor()
@@ -199,8 +300,11 @@ def test_cycle_continues_after_monitor_failure(
         logger="app.worker.run",
     )
 
-    run_check_cycle(db_session_factory)
-
+    run_check_cycle(
+        redis_client=redis_client,
+        lock_timeout_seconds=90,
+        session_factory=db_session_factory,
+    )
     assert set(attempted_monitor_ids) == monitor_ids
     assert len(attempted_monitor_ids) == 2
     assert "Monitor check failed" in caplog.text
@@ -208,12 +312,18 @@ def test_cycle_continues_after_monitor_failure(
 
 def test_worker_runs_cycle_until_stopped(
     db_session_factory: sessionmaker[Session],
-    monkeypatch: pytest.MonkeyPatch
+    monkeypatch: pytest.MonkeyPatch,
+    redis_client: Mock,
 ) -> None:
     stop_event = Event()
     received_factories: list[sessionmaker[Session]] = []
 
-    def fake_run_check_cycle(session_factory: sessionmaker[Session]) -> None:
+    def fake_run_check_cycle(
+        *,
+        redis_client: Mock,
+        lock_timeout_seconds: int,
+        session_factory: sessionmaker[Session],
+    ) -> None:
         received_factories.append(session_factory)
         stop_event.set()
 
@@ -225,6 +335,8 @@ def test_worker_runs_cycle_until_stopped(
     run_worker(
         stop_event=stop_event,
         poll_interval_seconds=60,
+        redis_client=redis_client,
+        lock_timeout_seconds=90,
         session_factory=db_session_factory,
     )
 
@@ -238,12 +350,16 @@ class ImmediateEvent(Event):
 def test_worker_continues_after_cycle_failure(
     db_session_factory: sessionmaker[Session],
     monkeypatch: pytest.MonkeyPatch,
+    redis_client: Mock,
     caplog: pytest.LogCaptureFixture,
 ) -> None:
     stop_event = ImmediateEvent()
     attempt_count = 0
 
     def fake_run_check_cycle(
+        *,
+        redis_client: Mock,
+        lock_timeout_seconds: int,
         session_factory: sessionmaker[Session],
     ) -> None:
         nonlocal attempt_count
@@ -259,8 +375,10 @@ def test_worker_continues_after_cycle_failure(
 
     run_worker(
         stop_event=stop_event,
-        poll_interval_seconds=5,
-        session_factory=db_session_factory
+        poll_interval_seconds=60,
+        redis_client=redis_client,
+        lock_timeout_seconds=90,
+        session_factory=db_session_factory,
     )
 
     assert attempt_count == 2
@@ -276,9 +394,17 @@ def test_main_registers_shutdown_handlers(
     mock_configure_logging = Mock()
 
     settings = SimpleNamespace(
-        WORKER_POLL_INTERVAL_SECONDS=7
+        WORKER_POLL_INTERVAL_SECONDS=7,
+        REDIS_LOCK_TIMEOUT_SECONDS=90,
     )
 
+    redis_client = Mock()
+
+    mock_create_redis_client = Mock(return_value=redis_client)
+    mock_check_redis_connection = Mock(return_value=True)
+
+    monkeypatch.setattr("app.worker.run.create_redis_client",mock_create_redis_client)
+    monkeypatch.setattr("app.worker.run.check_redis_connection",mock_check_redis_connection)
     monkeypatch.setattr("app.worker.run.Event", Mock(return_value=stop_event))
     monkeypatch.setattr("app.worker.run.signal.signal", mock_signal)
     monkeypatch.setattr("app.worker.run.get_settings", Mock(return_value=settings))
@@ -299,8 +425,12 @@ def test_main_registers_shutdown_handlers(
 
     mock_run_worker.assert_called_once_with(
         stop_event=stop_event,
-        poll_interval_seconds=7
+        poll_interval_seconds=7,
+        redis_client=redis_client,
+        lock_timeout_seconds=90,
     )
+
+    redis_client.close.assert_called_once()
 
     registered_handlers[signal.SIGTERM](
         signal.SIGTERM,
