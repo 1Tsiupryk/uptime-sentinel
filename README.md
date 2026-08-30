@@ -1,54 +1,94 @@
 # Uptime Sentinel
 
-Uptime Sentinel is a self-hosted uptime monitoring platform.
-
-The project is under active development. The current version provides a FastAPI backend, PostgreSQL persistence, monitor CRUD operations, health checks, database readiness checks, Alembic migrations, and a Docker Compose development environment.
+Uptime Sentinel is a self-hosted uptime monitoring platform for tracking HTTP endpoints. It provides scheduled and on-demand checks, stores check history, and exposes the results through a web dashboard and REST API.
 
 ## Current Features
 
-- FastAPI REST API
-- PostgreSQL database
-- SQLAlchemy models and sessions
-- Alembic database migrations
-- Monitor CRUD API
-- Liveness endpoint
-- Database readiness endpoint
-- Docker multi-stage build
-- Docker Compose environment
-- Persistent PostgreSQL volume
-- Automated tests with Pytest
+- Create, view, update, pause, and delete HTTP monitors
+- Configure the expected HTTP status code, check interval, and request timeout
+- Trigger checks manually from the dashboard or API
+- Store status, response code, latency, error details, and check time
+- Run scheduled checks in background workers
+- Coordinate multiple workers with Redis distributed locks
+- View recent check history
+- PostgreSQL persistence with Alembic migrations
+- Liveness and database readiness endpoints
+- Container health checks and non-root application containers
+
+## Architecture
+
+```text
+Browser
+   |
+   v
+Frontend (React + Nginx, port 3000)
+   |
+   | /api
+   v
+Backend (FastAPI, port 8000) -----> PostgreSQL
+                                          ^
+                                          |
+Background worker ------------------------+
+   |
+   v
+Redis (distributed monitor locks)
+```
+
+The backend handles monitor management and on-demand checks. The worker periodically finds due monitors and performs scheduled checks. Redis prevents two or more worker replicas from checking the same monitor at the same time.
 
 ## Technology Stack
 
+### Backend
+
 - Python 3.13
-- FastAPI
+- FastAPI and Uvicorn
+- SQLAlchemy and Alembic
 - PostgreSQL
-- SQLAlchemy
-- Alembic
-- Pydantic
+- Redis
 - Pytest
+
+### Frontend
+
+- React 19
+- TypeScript
+- Vite
+- Nginx
+
+### Infrastructure
+
 - Docker
 - Docker Compose
 
 ## Project Structure
 
 ```text
-uptime-sentinel/
+uptime-sentintel/
 ├── backend/
-│   ├── alembic/
+│   ├── alembic/                 # Database migrations
 │   ├── app/
-│   │   ├── api/
-│   │   │   ├── health.py
-│   │   │   └── monitors.py
+│   │   ├── api/                 # Health, monitor, and check routes
+│   │   ├── services/            # HTTP checker, persistence, Redis locks
+│   │   ├── worker/              # Scheduled check worker
 │   │   ├── config.py
 │   │   ├── db.py
 │   │   ├── main.py
 │   │   ├── models.py
+│   │   ├── redis_client.py
 │   │   └── schemas.py
 │   ├── tests/
 │   ├── Dockerfile
-│   ├── alembic.ini
 │   └── requirements.txt
+├── frontend/
+│   ├── src/
+│   │   ├── api/
+│   │   ├── assets/
+│   │   ├── components/
+│   │   ├── test/
+│   │   ├── types/
+│   │   └── App.tsx
+│   ├── Dockerfile
+│   ├── nginx.conf
+│   └── package.json
 ├── infra/
 │   └── docker/
 │       ├── .env.example
@@ -61,166 +101,112 @@ uptime-sentinel/
 
 ### Prerequisites
 
-Install:
-
 - Git
 - Docker Engine or Docker Desktop
 - Docker Compose
 
-### Clone the Repository
+### 1. Clone the repository
 
 ```bash
-git clone https://github.com/1Tsiupryk/uptime-sentintel.git
+git clone https://github.com/1Tsiupryk/uptime-sentinel.git
 cd uptime-sentinel
 ```
 
-### Configure the Environment
-
-Create a local Docker environment file:
+### 2. Configure environment variables
 
 ```bash
 cp infra/docker/.env.example infra/docker/.env
 ```
 
-Review `infra/docker/.env` and change the example password if necessary.
+For local development the defaults work as provided. Change `POSTGRES_PASSWORD` before using the project outside a local environment.
 
-### Start the Application
-
-```bash
-docker compose -f infra/docker/docker-compose.yml up --build
-```
-
-Docker Compose will:
-
-1. Start PostgreSQL.
-2. Wait until PostgreSQL is healthy.
-3. Run Alembic database migrations.
-4. Start the FastAPI backend.
-
-The API will be available at:
-
-```text
-http://localhost:8000
-```
-
-Interactive API documentation:
-
-```text
-http://localhost:8000/docs
-```
-
-## Health Endpoints
-
-### Liveness
-
-```bash
-curl http://localhost:8000/health
-```
-
-Expected response:
-
-```json
-{
-  "status": "ok"
-}
-```
-
-### Readiness
-
-```bash
-curl http://localhost:8000/ready
-```
-
-The readiness endpoint returns a successful response only when the backend can connect to PostgreSQL.
-
-## Monitor API
-
-Available operations:
-
-- `POST /monitors` - Create a monitor
-- `GET /monitors` - List monitors
-- `GET /monitors/{monitor_id}` - Get a monitor
-- `PATCH /monitors/{monitor_id}` - Update a monitor
-- `DELETE /monitors/{monitor_id}` - Delete a monitor
-
-Example:
-
-```bash
-curl -X POST http://localhost:8000/monitors -H "Content-Type: application/json" -d '{"name": "Example Website","url": "https://example.com"}'
-```
-
-List the created monitors:
-
-```bash
-curl http://localhost:8000/monitors
-```
-
-## Docker Commands
-
-Start in the background:
+### 3. Start the complete stack
 
 ```bash
 docker compose -f infra/docker/docker-compose.yml up --build -d
 ```
 
-View container status:
+Compose starts PostgreSQL, Redis, the FastAPI backend, the background worker, and the frontend. The backend container applies Alembic migrations before starting the API.
+
+### 4. Open the application
+
+- Dashboard: <http://localhost:3000>
+- API documentation: <http://localhost:8000/docs>
+
+Check the container status:
 
 ```bash
 docker compose -f infra/docker/docker-compose.yml ps
 ```
 
-View backend logs:
+## API
+
+### Health endpoints
+
+- `GET /health` - Backend liveness check
+- `GET /ready` - PostgreSQL readiness check
+
+### Monitor endpoints
+
+- `POST /monitors` - Create a monitor
+- `GET /monitors` - List all monitors
+- `GET /monitors/{monitor_id}` - Get one monitor
+- `PATCH /monitors/{monitor_id}` - Update or pause a monitor
+- `DELETE /monitors/{monitor_id}` - Delete a monitor and its check history
+- `POST /monitors/{monitor_id}/check` - Run an on-demand check
+- `GET /monitors/{monitor_id}/checks` - Get the monitor's check history
+
+## Useful Docker Commands
+
+View logs:
 
 ```bash
-docker compose -f infra/docker/docker-compose.yml logs -f backend
+docker compose -f infra/docker/docker-compose.yml logs -f
 ```
 
-Stop the application:
+View only API or worker logs:
+
+```bash
+docker compose -f infra/docker/docker-compose.yml logs -f backend worker
+```
+
+Rebuild and restart the stack:
+
+```bash
+docker compose -f infra/docker/docker-compose.yml up --build -d
+```
+
+Stop the stack while preserving PostgreSQL data:
 
 ```bash
 docker compose -f infra/docker/docker-compose.yml down
 ```
 
-PostgreSQL data is stored in a named Docker volume and survives a normal restart.
-
-To remove the containers and database volume:
+Delete the stack and its PostgreSQL volume:
 
 ```bash
 docker compose -f infra/docker/docker-compose.yml down -v
 ```
 
-> The `-v` option permanently deletes the local PostgreSQL data.
+> `down -v` permanently removes the local database volume and all stored monitors and check results.
 
-## Running Tests
+## Environment Variables
 
-Create and activate a virtual environment:
+The Docker stack is configured through `infra/docker/.env`.
 
-```bash
-cd backend
-python3 -m venv .venv
-source .venv/bin/activate
-```
+- `POSTGRES_*` - PostgreSQL connection and database credentials
+- `WORKER_POLL_INTERVAL_SECONDS` - How often the worker searches for due monitors
+- `REDIS_HOST`, `REDIS_PORT`, `REDIS_DB` - Redis connection settings
+- `REDIS_SOCKET_TIMEOUT_SECONDS` - Redis operation timeout
+- `REDIS_LOCK_TIMEOUT_SECONDS` - Maximum lifetime of a monitor lock
+- `CORS_ALLOWED_ORIGINS` - Origins allowed to call the API directly
 
-Install dependencies and run the tests:
-
-```bash
-python -m pip install -r requirements.txt
-python -m pytest -v
-```
+The frontend Docker image uses `/api` by default and Nginx proxies those requests to the backend. For local Vite development, copy `frontend/.env.example` to `frontend/.env` and set `VITE_API_URL` to the backend URL.
 
 ## Roadmap
 
-The further development of the project includes:
-
-- Manual HTTP endpoint checks
-- Check result history
-- Background monitoring worker
-- Redis integration
-- Incident detection and recovery
-- SSL certificate expiry checks
-- Prometheus metrics
-- Alert notifications
-- Web dashboard
+- Incident detection and recovery tracking
+- Prometheus metrics and Grafana dashboards
 - CI pipeline
 - Kubernetes deployment
 - Ansible server bootstrap
@@ -229,5 +215,6 @@ The further development of the project includes:
 ## Security Notes
 
 - Secrets are provided through environment variables.
-- Local `.env` files are excluded from Git.
 - The backend container runs as a non-root user.
+- The frontend uses the unprivileged Nginx image and listens on port `8080` inside the container.
+- PostgreSQL is exposed only on the host loopback interface in the local Compose setup.

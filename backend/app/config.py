@@ -22,6 +22,12 @@ class Settings(BaseSettings):
     REDIS_SOCKET_TIMEOUT_SECONDS: int = Field(default=2, ge=1, le=30)
     REDIS_LOCK_TIMEOUT_SECONDS: int = Field(default=90, ge=61, le=3600)
 
+    #CORS Settings
+    CORS_ALLOWED_ORIGINS: list[str] = [
+        "http://localhost:5173",
+        "http://127.0.0.1:5173"
+    ]
+
     # Database settings
     PROJECT_NAME: str
     POSTGRES_SERVER: str
