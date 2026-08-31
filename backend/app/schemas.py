@@ -37,3 +37,13 @@ class CheckResultRead(BaseModel):
     latency_ms: int
     error: str | None
     checked_at: datetime
+
+class IncidentRead(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    monitor_id: int
+    started_at: datetime
+    resolved_at: datetime | None
+    opening_check_id: int
+    closing_check_id: int | None
