@@ -4,6 +4,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.api.checks import router as checks_router
 from app.api.health import router as health_router
 from app.api.monitors import router as monitors_router
+from app.api.incidents import router as incidents_router
 from app.config import get_settings
 
 
@@ -22,3 +23,4 @@ app.add_middleware(
 app.include_router(health_router)
 app.include_router(monitors_router)
 app.include_router(checks_router)
+app.include_router(incidents_router)

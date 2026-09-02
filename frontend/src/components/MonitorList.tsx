@@ -1,10 +1,12 @@
 import { useState } from "react"
 
-import { CheckHistory } from "./CheckHistory"
+import { MonitorHistory } from "./MonitorHistory"
+import type { Incident } from "../types/incident"
 import type {
     CheckResult,
     Monitor,
 } from "../types/monitor"
+import { formatIncidentDuration } from "../utils/incidents"
 
 function PulseIcon() {
     return (
@@ -52,6 +54,7 @@ function TrashIcon() {
 
 interface MonitorListProps {
     monitors: Monitor[]
+    activeIncidents: Incident[]
     latestChecks: Record<number, CheckResult>
     checkingMonitorId: number | null
     checkError: {
@@ -75,6 +78,7 @@ interface MonitorListProps {
 
 export function MonitorList({
     monitors,
+    activeIncidents,
     latestChecks,
     checkingMonitorId,
     checkError,
@@ -107,6 +111,9 @@ export function MonitorList({
                 <ul className="monitor-list">
                     {monitors.map((monitor) => {
                         const latestCheck = latestChecks[monitor.id]
+                        const activeIncident = activeIncidents.find(
+                            (incident) => incident.monitor_id === monitor.id,
+                        )
 
                         const isChecking =
                             checkingMonitorId === monitor.id
@@ -137,24 +144,44 @@ export function MonitorList({
 
                         return (
                             <li
-                                className="monitor-card"
+                                className={`monitor-card ${
+                                    activeIncident ? "has-incident" : ""
+                                }`}
                                 key={monitor.id}
                             >
                                 <div className="monitor-card-header">
                                     <div>
-                                        <span
-                                            className={
-                                                monitor.enabled
-                                                    ? "status-badge enabled"
-                                                    : "status-badge disabled"
-                                            }
-                                        >
-                                            <span className="status-dot" />
+                                        <div className="monitor-statuses">
+                                            {activeIncident ? (
+                                                <span className="status-badge incident">
+                                                    <span className="status-dot" />
+                                                    Active incident ·{" "}
+                                                    {formatIncidentDuration(
+                                                        activeIncident,
+                                                    )}
+                                                </span>
+                                            ) : (
+                                                <span
+                                                    className={
+                                                        monitor.enabled
+                                                            ? "status-badge enabled"
+                                                            : "status-badge disabled"
+                                                    }
+                                                >
+                                                    <span className="status-dot" />
+                                                    {monitor.enabled
+                                                        ? "Enabled"
+                                                        : "Paused"}
+                                                </span>
+                                            )}
 
-                                            {monitor.enabled
-                                                ? "Enabled"
-                                                : "Paused"}
-                                        </span>
+                                            {activeIncident && !monitor.enabled && (
+                                                <span className="status-badge disabled">
+                                                    <span className="status-dot" />
+                                                    Paused
+                                                </span>
+                                            )}
+                                        </div>
 
                                         <h3>{monitor.name}</h3>
                                     </div>
@@ -326,7 +353,7 @@ export function MonitorList({
                                 )}
 
                                 {isHistoryOpen && (
-                                    <CheckHistory
+                                    <MonitorHistory
                                         monitorId={monitor.id}
                                         refreshKey={latestCheck?.id}
                                     />

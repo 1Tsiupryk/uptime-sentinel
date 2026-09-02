@@ -4,6 +4,7 @@ import type {
     MonitorCreate,
     MonitorUpdate,
 } from "../types/monitor"
+import type { Incident, IncidentStatus } from "../types/incident"
 
 const API_URL =
     import.meta.env.VITE_API_URL ?? "http://localhost:8000"
@@ -84,5 +85,29 @@ export function getMonitorChecks(
 ): Promise<CheckResult[]> {
     return request<CheckResult[]>(
         `/monitors/${monitorId}/checks`,
+    )
+}
+
+export function getIncidents(
+    status?: IncidentStatus,
+): Promise<Incident[]> {
+    const query = status
+        ? `?${new URLSearchParams({ status }).toString()}`
+        : ""
+
+    return request<Incident[]>(`/incidents${query}`)
+}
+
+export function getIncident(
+    incidentId: number,
+): Promise<Incident> {
+    return request<Incident>(`/incidents/${incidentId}`)
+}
+
+export function getMonitorIncidents(
+    monitorId: number,
+): Promise<Incident[]> {
+    return request<Incident[]>(
+        `/monitors/${monitorId}/incidents`,
     )
 }

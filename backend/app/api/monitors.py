@@ -1,7 +1,7 @@
 from fastapi import APIRouter, status, HTTPException
 from app.db import DbSession
-from app.models import Monitor
-from app.schemas import MonitorCreate, MonitorRead, MonitorUpdate
+from app.models import Monitor, Incident
+from app.schemas import IncidentRead, MonitorCreate, MonitorRead, MonitorUpdate
 
 router = APIRouter(prefix="/monitors", tags=["monitors"])
 
@@ -58,3 +58,14 @@ def delete_monitor(monitor_id: int, db: DbSession):
     db.commit()
 
     return
+
+@router.get("/{monitor_id}/incidents", response_model=list[IncidentRead])
+def read_monitor_incidents(monitor_id: int, db: DbSession):
+    """List incidents for a specific monitor"""
+    monitor = db.get(Monitor, monitor_id)
+    if monitor is None:
+        raise HTTPException(status_code=404, detail="Monitor not found")
+
+    return db.query(Incident).filter(Incident.monitor_id == monitor_id).order_by(Incident.started_at.desc(), Incident.id.desc()).all()
+
+    

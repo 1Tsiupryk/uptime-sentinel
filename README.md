@@ -4,16 +4,14 @@ Uptime Sentinel is a self-hosted uptime monitoring platform for tracking HTTP en
 
 ## Current Features
 
-- Create, view, update, pause, and delete HTTP monitors
-- Configure the expected HTTP status code, check interval, and request timeout
-- Trigger checks manually from the dashboard or API
-- Store status, response code, latency, error details, and check time
-- Run scheduled checks in background workers
-- Coordinate multiple workers with Redis distributed locks
-- View recent check history
-- PostgreSQL persistence with Alembic migrations
-- Liveness and database readiness endpoints
-- Container health checks and non-root application containers
+- Manage HTTP monitors with configurable status codes, intervals, and timeouts
+- Run on-demand and scheduled checks with detailed result history
+- Scale background workers safely with Redis distributed locks
+- Track incidents automatically from outage detection through recovery
+- Prevent duplicate incidents and record duration, related checks, and lifecycle events
+- Explore live-updating monitor, check, and incident data in the web dashboard
+- Persist application data in PostgreSQL with Alembic migrations
+- Run a containerized stack with health checks, readiness endpoints, and non-root containers
 
 ## Architecture
 
@@ -35,6 +33,14 @@ Redis (distributed monitor locks)
 ```
 
 The backend handles monitor management and on-demand checks. The worker periodically finds due monitors and performs scheduled checks. Redis prevents two or more worker replicas from checking the same monitor at the same time.
+
+## Incident Lifecycle
+
+An incident is automatically opened when a monitor check returns a `down` result. Consecutive failed checks remain associated with the same active incident.
+
+When a later check returns `up`, the active incident is resolved. Each incident stores its opening and closing check references, start time, resolution time, and calculated duration.
+
+The dashboard polls the API every 10 seconds to refresh active incident counters, monitor badges, and incident history.
 
 ## Technology Stack
 
@@ -156,6 +162,14 @@ docker compose -f infra/docker/docker-compose.yml ps
 - `POST /monitors/{monitor_id}/check` - Run an on-demand check
 - `GET /monitors/{monitor_id}/checks` - Get the monitor's check history
 
+### Incident endpoints
+
+- `GET /incidents` - List all incidents
+- `GET /incidents?status=open` - List active incidents
+- `GET /incidents?status=resolved` - List resolved incidents
+- `GET /incidents/{incident_id}` - Get incident details
+- `GET /monitors/{monitor_id}/incidents` - List incidents for a specific monitor
+
 ## Useful Docker Commands
 
 View logs:
@@ -205,7 +219,6 @@ The frontend Docker image uses `/api` by default and Nginx proxies those request
 
 ## Roadmap
 
-- Incident detection and recovery tracking
 - Prometheus metrics and Grafana dashboards
 - CI pipeline
 - Kubernetes deployment
