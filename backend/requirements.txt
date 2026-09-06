@@ -7,3 +7,4 @@ sqlalchemy==2.0.51
 psycopg[binary]==3.3.4
 alembic==1.18.5
 redis==8.1.0
+prometheus-client==0.26.0

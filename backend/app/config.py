@@ -14,6 +14,11 @@ class Settings(BaseSettings):
 
     #Worker settings
     WORKER_POLL_INTERVAL_SECONDS: int = Field(default=5, ge=1, le=300)
+    WORKER_METRICS_PORT: int = Field(
+        default=9000,
+        ge=1024,
+        le=65535,
+    )
 
     #Redis settings
     REDIS_HOST: str = "redis"

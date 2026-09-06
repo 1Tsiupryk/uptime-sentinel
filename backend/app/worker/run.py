@@ -12,6 +12,7 @@ import signal
 from threading import Event
 from types import FrameType
 from app.config import get_settings
+from prometheus_client import start_http_server
 
 logger = logging.getLogger(__name__)
 
@@ -195,6 +196,16 @@ def main() -> None:
         redis_client.close()
         raise SystemExit(1)
         
+    start_http_server(
+        port=settings.WORKER_METRICS_PORT,
+        addr="0.0.0.0",
+    )
+
+    logger.info(
+        "Worker metrics server started port=%s",
+        settings.WORKER_METRICS_PORT,
+    )
+
     stop_event = Event()
 
     def request_shutdown(signum: int, _frame: FrameType | None) -> None:

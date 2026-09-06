@@ -3,6 +3,7 @@ from app.models import Monitor, CheckResult
 from sqlalchemy.orm import Session
 from sqlalchemy.exc import SQLAlchemyError
 from app.services.incident_manager import process_check_result
+from app.metrics import record_check, record_incident_event
 import logging
 
 logger = logging.getLogger(__name__)
@@ -41,6 +42,8 @@ def run_monitor_check(monitor: Monitor, db: Session) -> CheckResult:
         db.rollback()
         raise
 
+    record_check(monitor.id, result.status, result.latency_ms)
+
     if incident is not None:
         if incident_opened:
             logger.warning(
@@ -49,6 +52,8 @@ def run_monitor_check(monitor: Monitor, db: Session) -> CheckResult:
                 monitor.id,
                 check_result.id,
             )
+            record_incident_event("opened")
+
 
         if incident_resolved:
             logger.info(
@@ -57,5 +62,7 @@ def run_monitor_check(monitor: Monitor, db: Session) -> CheckResult:
                 monitor.id,
                 check_result.id,
             )
+            record_incident_event("resolved")
 
     return check_result
+    

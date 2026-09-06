@@ -12,6 +12,7 @@ Uptime Sentinel is a self-hosted uptime monitoring platform for tracking HTTP en
 - Explore live-updating monitor, check, and incident data in the web dashboard
 - Persist application data in PostgreSQL with Alembic migrations
 - Run a containerized stack with health checks, readiness endpoints, and non-root containers
+- Export Prometheus metrics and visualize system health through a provisioned Grafana dashboard
 
 ## Architecture
 
@@ -24,12 +25,13 @@ Frontend (React + Nginx, port 3000)
    | /api
    v
 Backend (FastAPI, port 8000) -----> PostgreSQL
-                                          ^
-                                          |
-Background worker ------------------------+
+   |                                      ^
+   | /metrics                             |
+   v                                      |
+Prometheus <------ Background workers ----+
    |
    v
-Redis (distributed monitor locks)
+Grafana (port 3001)
 ```
 
 The backend handles monitor management and on-demand checks. The worker periodically finds due monitors and performs scheduled checks. Redis prevents two or more worker replicas from checking the same monitor at the same time.
@@ -64,6 +66,8 @@ The dashboard polls the API every 10 seconds to refresh active incident counters
 
 - Docker
 - Docker Compose
+- Prometheus
+- Grafana
 
 ## Project Structure
 
@@ -72,7 +76,7 @@ uptime-sentintel/
 ├── backend/
 │   ├── alembic/                 # Database migrations
 │   ├── app/
-│   │   ├── api/                 # Health, monitor, and check routes
+│   │   ├── api/                 # Health, metrics, monitor, and check routes
 │   │   ├── services/            # HTTP checker, persistence, Redis locks
 │   │   ├── worker/              # Scheduled check worker
 │   │   ├── config.py
@@ -96,9 +100,16 @@ uptime-sentintel/
 │   ├── nginx.conf
 │   └── package.json
 ├── infra/
-│   └── docker/
-│       ├── .env.example
-│       └── docker-compose.yml
+│   ├── docker/
+│   │   └── docker-compose.yml
+│   ├── prometheus/
+│   │   └── prometheus.yml
+│   └── grafana/
+│       ├── dashboards/
+│       │   └── uptime-sentinel-overview.json
+│       └── provisioning/
+│           ├── dashboards/
+│           └── datasources/
 ├── .gitignore
 └── README.md
 ```
@@ -204,6 +215,27 @@ docker compose -f infra/docker/docker-compose.yml down -v
 
 > `down -v` permanently removes the local database volume and all stored monitors and check results.
 
+## Observability
+
+The backend and background workers expose Prometheus metrics for HTTP checks, latency, monitor status, and incident lifecycle events.
+
+Available services:
+
+- Prometheus: `http://localhost:9090`
+- Grafana: `http://localhost:3001`
+- Backend metrics: `http://localhost:8000/metrics`
+
+The Grafana Prometheus data source and the `Uptime Sentinel Overview` dashboard are provisioned automatically when the stack starts.
+
+Exported metrics include:
+
+- `uptime_sentinel_checks_total` — completed checks grouped by monitor and status
+- `uptime_sentinel_check_latency_seconds` — check latency histogram
+- `uptime_sentinel_incident_events_total` — opened and resolved incident events
+- `uptime_sentinel_monitor_up` — latest known status of enabled monitors
+
+Prometheus discovers all worker replicas through Docker DNS and scrapes their metrics independently.
+
 ## Environment Variables
 
 The Docker stack is configured through `infra/docker/.env`.
@@ -214,12 +246,13 @@ The Docker stack is configured through `infra/docker/.env`.
 - `REDIS_SOCKET_TIMEOUT_SECONDS` - Redis operation timeout
 - `REDIS_LOCK_TIMEOUT_SECONDS` - Maximum lifetime of a monitor lock
 - `CORS_ALLOWED_ORIGINS` - Origins allowed to call the API directly
+- `WORKER_METRICS_PORT` - Internal port used to expose worker Prometheus metrics
+- `GRAFANA_ADMIN_USER`, `GRAFANA_ADMIN_PASSWORD` - Grafana administrator credentials
 
 The frontend Docker image uses `/api` by default and Nginx proxies those requests to the backend. For local Vite development, copy `frontend/.env.example` to `frontend/.env` and set `VITE_API_URL` to the backend URL.
 
 ## Roadmap
 
-- Prometheus metrics and Grafana dashboards
 - CI pipeline
 - Kubernetes deployment
 - Ansible server bootstrap

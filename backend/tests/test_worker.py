@@ -396,13 +396,18 @@ def test_main_registers_shutdown_handlers(
     settings = SimpleNamespace(
         WORKER_POLL_INTERVAL_SECONDS=7,
         REDIS_LOCK_TIMEOUT_SECONDS=90,
+        WORKER_METRICS_PORT=9000,
     )
+
+    mock_start_http_server = Mock()
+
 
     redis_client = Mock()
 
     mock_create_redis_client = Mock(return_value=redis_client)
     mock_check_redis_connection = Mock(return_value=True)
 
+    monkeypatch.setattr("app.worker.run.start_http_server", mock_start_http_server)
     monkeypatch.setattr("app.worker.run.create_redis_client",mock_create_redis_client)
     monkeypatch.setattr("app.worker.run.check_redis_connection",mock_check_redis_connection)
     monkeypatch.setattr("app.worker.run.Event", Mock(return_value=stop_event))
@@ -430,11 +435,10 @@ def test_main_registers_shutdown_handlers(
         lock_timeout_seconds=90,
     )
 
+    mock_start_http_server.assert_called_once_with(port=9000, addr="0.0.0.0")
+
     redis_client.close.assert_called_once()
 
-    registered_handlers[signal.SIGTERM](
-        signal.SIGTERM,
-        None,
-    )
+    registered_handlers[signal.SIGTERM](signal.SIGTERM,None)
 
     stop_event.set.assert_called_once()
