@@ -16,7 +16,7 @@ jobs:
     defaults:
       run:
         working-directory: backend
-        
+
     env:
       PROJECT_NAME: uptime-sentinel
       POSTGRES_SERVER: localhost
@@ -26,7 +26,7 @@ jobs:
       POSTGRES_DB: uptime_sentinel
 
     steps:
-      - name: Checkout code
+      - name: Checkout repository
         uses: actions/checkout@v7
 
       - name: Set up Python 3.13
@@ -53,7 +53,7 @@ jobs:
         working-directory: frontend
 
     steps:
-      - name: Checkout code
+      - name: Checkout repository
         uses: actions/checkout@v7
 
       - name: Set up Node.js 24
@@ -88,7 +88,7 @@ jobs:
             context: ./backend
 
     steps:
-      - name: Checkout code
+      - name: Checkout repository
         uses: actions/checkout@v7
 
       - name: Set up Docker Buildx
@@ -100,3 +100,15 @@ jobs:
           context: ${{ matrix.context }}
           push: false
           tags: uptime-sentinel-${{ matrix.image }}:ci
+
+  compose-validation:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+
+      - name: Prepare test .env
+        run: cp infra/docker/.env.example infra/docker/.env
+
+      - name: Validate Compose configuration
+        run: docker compose -f infra/docker/docker-compose.yml config --quiet
