@@ -1,4 +1,5 @@
 # Uptime Sentinel
+[![CI](https://github.com/1Tsiupryk/uptime-sentinel/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/1Tsiupryk/uptime-sentinel/actions/workflows/ci.yml)
 
 Uptime Sentinel is a self-hosted uptime monitoring platform for tracking HTTP endpoints. It provides scheduled and on-demand checks, stores check history, and exposes the results through a web dashboard and REST API.
 
@@ -251,9 +252,17 @@ The Docker stack is configured through `infra/docker/.env`.
 
 The frontend Docker image uses `/api` by default and Nginx proxies those requests to the backend. For local Vite development, copy `frontend/.env.example` to `frontend/.env` and set `VITE_API_URL` to the backend URL.
 
+## Continuous Integration
+
+GitHub Actions runs the following checks on every push and pull request to `main`:
+
+- Backend tests with Pytest
+- Frontend linting, tests, and production build
+- Backend and frontend Docker image builds
+- Docker Compose configuration validation
+
 ## Roadmap
 
-- CI pipeline
 - Kubernetes deployment
 - Ansible server bootstrap
 - Operational runbooks
