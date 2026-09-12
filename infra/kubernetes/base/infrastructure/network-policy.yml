@@ -1,0 +1,224 @@
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: default-deny-all
+spec:
+  podSelector: {}
+  policyTypes:
+    - Ingress
+    - Egress
+  ingress: []
+  egress: []
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-dns-egress
+spec:
+  podSelector: {}
+  policyTypes: [Egress]
+  egress:
+    - to:
+      - namespaceSelector:
+          matchLabels:
+            kubernetes.io/metadata.name: kube-system
+        podSelector:
+          matchLabels:
+            k8s-app: kube-dns
+      ports:
+        - protocol: UDP
+          port: 53
+        - protocol: TCP
+          port: 53
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-traefik-to-frontend
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: uptime-sentinel
+      app.kubernetes.io/component: frontend
+  policyTypes: [Ingress]
+  ingress:
+    - from:
+      - namespaceSelector:
+          matchLabels:
+            kubernetes.io/metadata.name: traefik
+        podSelector:
+          matchLabels:
+            app.kubernetes.io/name: traefik
+      ports:
+        - protocol: TCP
+          port: 8080
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-frontend-egress-to-backend
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: uptime-sentinel
+      app.kubernetes.io/component: frontend
+  policyTypes: [Egress]
+  egress:
+    - to:
+      - podSelector:
+          matchLabels:
+            app.kubernetes.io/name: uptime-sentinel
+            app.kubernetes.io/component: backend
+      ports:
+        - protocol: TCP
+          port: 8000
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-backend-ingress-from-frontend
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: uptime-sentinel
+      app.kubernetes.io/component: backend
+  policyTypes: [Ingress]
+  ingress:
+    - from:
+      - podSelector:
+          matchLabels:
+            app.kubernetes.io/name: uptime-sentinel
+            app.kubernetes.io/component: frontend
+      ports:
+        - protocol: TCP
+          port: 8000
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-app-egress-to-postgres
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: uptime-sentinel
+    matchExpressions:
+      - key: app.kubernetes.io/component
+        operator: In
+        values:
+          - backend
+          - worker
+          - migration
+  policyTypes: [Egress]
+  egress:
+    - to:
+      - podSelector:
+          matchLabels:
+            app.kubernetes.io/name: postgres
+            app.kubernetes.io/component: database
+      ports:
+        - protocol: TCP
+          port: 5432
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-app-egress-to-redis
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: uptime-sentinel
+    matchExpressions:
+      - key: app.kubernetes.io/component
+        operator: In
+        values:
+          - backend
+          - worker
+  policyTypes: [Egress]
+  egress:
+    - to:
+      - podSelector:
+          matchLabels:
+            app.kubernetes.io/name: redis
+            app.kubernetes.io/component: cache
+      ports:
+        - protocol: TCP
+          port: 6379
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-postgres-ingress-from-app
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: postgres
+      app.kubernetes.io/component: database
+  policyTypes: [Ingress]
+  ingress:
+    - from:
+      - podSelector:
+          matchLabels:
+            app.kubernetes.io/name: uptime-sentinel
+          matchExpressions:
+            - key: app.kubernetes.io/component
+              operator: In
+              values:
+                - backend
+                - worker
+                - migration
+      ports:
+        - protocol: TCP
+          port: 5432
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-redis-ingress-from-app
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: redis
+      app.kubernetes.io/component: cache
+  policyTypes: [Ingress]
+  ingress:
+    - from:
+      - podSelector:
+          matchLabels:
+            app.kubernetes.io/name: uptime-sentinel
+          matchExpressions:
+            - key: app.kubernetes.io/component
+              operator: In
+              values:
+                - backend
+                - worker
+      ports:
+        - protocol: TCP
+          port: 6379
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-monitor-check-egress
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: uptime-sentinel
+    matchExpressions:
+      - key: app.kubernetes.io/component
+        operator: In
+        values:
+          - worker
+          - backend
+  policyTypes: [Egress]
+  egress:
+    - to:
+      - ipBlock:
+          cidr: 0.0.0.0/0
+      ports:
+        - protocol: TCP
+          port: 80
+        - protocol: TCP
+          port: 443
+        - protocol: TCP
+          port: 8080
+          

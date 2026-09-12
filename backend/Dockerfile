@@ -17,15 +17,20 @@ ENV PATH="/venv/bin:$PATH" \
     PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1
 
-RUN addgroup --system appgroup \
-    && adduser --system --ingroup appgroup --no-create-home appuser
+RUN addgroup --system --gid 10001 appgroup \
+    && adduser \
+    --system \
+    --uid 10001 \
+    --ingroup appgroup \
+    --no-create-home \
+    appuser
 
 WORKDIR /app
 
 COPY --from=builder /venv /venv
-COPY --from=builder --chown=appuser:appgroup /app /app
+COPY --from=builder --chown=10001:10001 /app /app
 
-USER appuser
+USER 10001:10001
 
 EXPOSE 8000
 
