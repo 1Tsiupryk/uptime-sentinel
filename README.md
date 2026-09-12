@@ -5,15 +5,16 @@ Uptime Sentinel is a self-hosted uptime monitoring platform for tracking HTTP en
 
 ## Current Features
 
-- Manage HTTP monitors with configurable status codes, intervals, and timeouts
-- Run on-demand and scheduled checks with detailed result history
-- Scale background workers safely with Redis distributed locks
-- Track incidents automatically from outage detection through recovery
-- Prevent duplicate incidents and record duration, related checks, and lifecycle events
-- Explore live-updating monitor, check, and incident data in the web dashboard
-- Persist application data in PostgreSQL with Alembic migrations
-- Run a containerized stack with health checks, readiness endpoints, and non-root containers
-- Export Prometheus metrics and visualize system health through a provisioned Grafana dashboard
+- Configure and manage HTTP monitors with custom status codes, intervals, and timeouts
+- Run on-demand and scheduled checks using horizontally scalable background workers
+- Prevent duplicate checks across worker replicas with Redis distributed locks
+- Store check history and automatically track incidents from outage through recovery
+- Explore live monitor status, check history, and incidents through the React dashboard
+- Persist application data in PostgreSQL with versioned Alembic migrations
+- Export application and worker metrics to Prometheus with a provisioned Grafana dashboard
+- Deploy the complete stack with Docker Compose or Kubernetes using staged migration and application rollouts
+- Route Kubernetes traffic through Traefik, Gateway API and multiple application replicas
+- Protect Kubernetes workloads with restricted Pod Security, non-root containers, dropped capabilities, and default-deny NetworkPolicies
 
 ## Architecture
 
@@ -21,18 +22,18 @@ Uptime Sentinel is a self-hosted uptime monitoring platform for tracking HTTP en
 Browser
    |
    v
-Frontend (React + Nginx, port 3000)
+Frontend (React + Nginx)
    |
    | /api
    v
-Backend (FastAPI, port 8000) -----> PostgreSQL
-   |                                      ^
-   | /metrics                             |
-   v                                      |
-Prometheus <------ Background workers ----+
+Backend (FastAPI) -----> PostgreSQL
+   |                            ^
+   | /metrics                   |
+   v                            |
+Prometheus <------ Background workers
    |
    v
-Grafana (port 3001)
+Grafana
 ```
 
 The backend handles monitor management and on-demand checks. The worker periodically finds due monitors and performs scheduled checks. Redis prevents two or more worker replicas from checking the same monitor at the same time.
@@ -69,20 +70,31 @@ The dashboard polls the API every 10 seconds to refresh active incident counters
 - Docker Compose
 - Prometheus
 - Grafana
+- Kubernetes
+- Kind
+- Helm
+- Traefik Gateway API
+- Prometheus Operator
+- NetworkPolicy
 
 ## Project Structure
 
 ```text
-uptime-sentintel/
+uptime-sentinel/
+├── .github/
+│   └── workflows/
+│       └── ci.yml                         # Tests, builds, and infrastructure validation
 ├── backend/
-│   ├── alembic/                 # Database migrations
+│   ├── alembic/
+│   │   └── versions/                      # Database migrations
 │   ├── app/
-│   │   ├── api/                 # Health, metrics, monitor, and check routes
-│   │   ├── services/            # HTTP checker, persistence, Redis locks
-│   │   ├── worker/              # Scheduled check worker
+│   │   ├── api/                           # Health, metrics, monitors, checks, incidents
+│   │   ├── services/                      # Checker, incidents, locks, and metrics logic
+│   │   ├── worker/                        # Scheduled check worker
 │   │   ├── config.py
 │   │   ├── db.py
 │   │   ├── main.py
+│   │   ├── metrics.py
 │   │   ├── models.py
 │   │   ├── redis_client.py
 │   │   └── schemas.py
@@ -91,27 +103,41 @@ uptime-sentintel/
 │   └── requirements.txt
 ├── frontend/
 │   ├── src/
-│   │   ├── api/
+│   │   ├── api/                           # Backend API client
 │   │   ├── assets/
 │   │   ├── components/
+│   │   ├── pages/
 │   │   ├── test/
 │   │   ├── types/
+│   │   ├── utils/
 │   │   └── App.tsx
 │   ├── Dockerfile
 │   ├── nginx.conf
 │   └── package.json
 ├── infra/
 │   ├── docker/
+│   │   ├── .env.example
 │   │   └── docker-compose.yml
+│   ├── grafana/
+│   │   ├── dashboards/                    # Provisioned Uptime Sentinel dashboard
+│   │   └── provisioning/                  # Docker Compose provisioning
 │   ├── prometheus/
-│   │   └── prometheus.yml
-│   └── grafana/
-│       ├── dashboards/
-│       │   └── uptime-sentinel-overview.json
-│       └── provisioning/
-│           ├── dashboards/
-│           └── datasources/
+│   │   └── prometheus.yml                 # Docker Compose scrape configuration
+│   └── kubernetes/
+│       ├── base/
+│       │   ├── application/               # Backend, worker, frontend, and Gateway
+│       │   ├── infrastructure/            # Namespace, PostgreSQL, Redis, and policies
+│       │   └── migration/                 # Alembic migration Job
+│       ├── monitoring/                    # Helm values, ServiceMonitor, and PodMonitor
+│       ├── overlays/
+│       │   └── local/                     # Local Kind image and secret configuration
+│       └── traefik/
+│           └── values.yml
+├── scripts/
+│   ├── deploy-local.sh                    # Staged Kubernetes application deployment
+│   └── deploy-monitoring.sh               # Prometheus and Grafana deployment
 ├── .gitignore
+├── pyrefly.toml
 └── README.md
 ```
 
@@ -156,6 +182,76 @@ Check the container status:
 ```bash
 docker compose -f infra/docker/docker-compose.yml ps
 ```
+
+## Kubernetes Deployment
+
+### Prerequisites
+
+- Docker
+- kubectl
+- Kind
+- Helm
+
+### 1. Create a local cluster
+
+```bash
+kind create cluster --name uptime-sentinel
+```
+
+### 2. Install Gateway API and Traefik
+
+```bash
+kubectl apply --server-side -f \
+  https://github.com/kubernetes-sigs/gateway-api/releases/download/v1.6.1/standard-install.yaml
+
+helm repo add traefik https://traefik.github.io/charts --force-update
+
+helm upgrade --install traefik traefik/traefik \
+  --version 41.5.0 \
+  --namespace traefik \
+  --create-namespace \
+  --values infra/kubernetes/traefik/values.yml \
+  --wait \
+  --timeout 5m
+```
+
+### 3. Configure the application
+
+```bash
+cp infra/kubernetes/overlays/local/infrastructure/.env.example \
+  infra/kubernetes/overlays/local/infrastructure/.env
+```
+
+Review the generated environment file and replace local development credentials when necessary.
+
+### 4. Build and load application images
+
+```bash
+docker build -t uptime-sentinel-backend:local ./backend
+docker build -t uptime-sentinel-frontend:local ./frontend
+
+kind load docker-image uptime-sentinel-backend:local \
+  --name uptime-sentinel
+
+kind load docker-image uptime-sentinel-frontend:local \
+  --name uptime-sentinel
+```
+
+### 5. Deploy the application
+
+```bash
+./scripts/deploy-local.sh
+```
+
+The script deploys PostgreSQL and Redis, runs Alembic migrations, and then rolls out the backend, workers, frontend, Gateway, and HTTPRoute.
+
+Access the application through Traefik:
+
+```bash
+kubectl port-forward -n traefik service/traefik 8080:80
+```
+
+Open <http://localhost:8080>.
 
 ## API
 
@@ -237,6 +333,37 @@ Exported metrics include:
 
 Prometheus discovers all worker replicas through Docker DNS and scrapes their metrics independently.
 
+### Kubernetes monitoring
+
+Deploy Prometheus Operator, Prometheus, Grafana, application monitors, and the provisioned dashboard:
+
+```bash
+./scripts/deploy-monitoring.sh
+```
+
+Access Prometheus:
+
+```bash
+kubectl port-forward -n monitoring \
+  service/monitoring-kube-prometheus-prometheus 9090:9090
+```
+
+Access Grafana:
+
+```bash
+kubectl port-forward -n monitoring \
+  service/monitoring-grafana 3002:80
+```
+
+Prometheus discovers backend replicas through a `ServiceMonitor` and worker replicas through a `PodMonitor`. Grafana loads the `Uptime Sentinel Overview` dashboard from a generated ConfigMap.
+
+The default Grafana username is `admin`. Retrieve the generated password:
+
+```bash
+kubectl get secret monitoring-grafana -n monitoring \
+  -o jsonpath='{.data.admin-password}' | base64 --decode
+```
+
 ## Environment Variables
 
 The Docker stack is configured through `infra/docker/.env`.
@@ -260,10 +387,12 @@ GitHub Actions runs the following checks on every push and pull request to `main
 - Frontend linting, tests, and production build
 - Backend and frontend Docker image builds
 - Docker Compose configuration validation
+- Kubernetes Kustomize manifest validation
+- Traefik and kube-prometheus-stack Helm rendering
+- Local deployment script syntax validation
 
 ## Roadmap
 
-- Kubernetes deployment
 - Ansible server bootstrap
 - Operational runbooks
 
@@ -273,3 +402,7 @@ GitHub Actions runs the following checks on every push and pull request to `main
 - The backend container runs as a non-root user.
 - The frontend uses the unprivileged Nginx image and listens on port `8080` inside the container.
 - PostgreSQL is exposed only on the host loopback interface in the local Compose setup.
+- Uptime Sentinel application workloads run as non-root users with dropped Linux capabilities and privilege escalation disabled.
+- The application namespace uses Kubernetes Pod Security admission controls.
+- Default-deny NetworkPolicies restrict traffic between the frontend, backend, workers, PostgreSQL, Redis, Traefik, and Prometheus.
+- Kubernetes ServiceAccount token mounting is disabled where it is not required.
