@@ -9,7 +9,7 @@ resources:
 images:
   - name: uptime-sentinel-frontend
     newName: ghcr.io/1tsiupryk/uptime-sentinel-frontend
-    newTag: "sha-855c1bf"
+    newTag: "0.1.0"
   - name: uptime-sentinel-backend
     newName: ghcr.io/1tsiupryk/uptime-sentinel-backend
-    newTag: "sha-855c1bf"
+    newTag: "0.1.0"
