@@ -63,7 +63,7 @@
                       "kind": "DataQuery",
                       "spec": {
                         "editorMode": "code",
-                        "expr": "sum by (job) (up)",
+                        "expr": "count(up{job=~'.*uptime-sentinel.*'})",
                         "legendFormat": "__auto",
                         "range": true
                       },
@@ -737,7 +737,7 @@
                       "kind": "DataQuery",
                       "spec": {
                         "editorMode": "code",
-                        "expr": "count(uptime_sentinel_monitor_up == 1) or vector(0)",
+                        "expr": "count(max by (monitor_id) (uptime_sentinel_monitor_up) == 1) or vector(0)",
                         "legendFormat": "__auto",
                         "range": true
                       },
@@ -822,7 +822,7 @@
                       "kind": "DataQuery",
                       "spec": {
                         "editorMode": "code",
-                        "expr": "count(uptime_sentinel_monitor_up == 0) or vector(0)",
+                        "expr": "count(max by (monitor_id) (uptime_sentinel_monitor_up) == 0) or vector(0)",
                         "legendFormat": "__auto",
                         "range": true
                       },

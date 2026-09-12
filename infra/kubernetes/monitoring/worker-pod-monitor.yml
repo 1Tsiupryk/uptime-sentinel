@@ -1,0 +1,20 @@
+apiVersion: monitoring.coreos.com/v1
+kind: PodMonitor
+metadata:
+  name: uptime-sentinel-worker
+  namespace: uptime-sentinel
+  labels:
+    app.kubernetes.io/name: uptime-sentinel
+    app.kubernetes.io/component: worker
+    app.kubernetes.io/part-of: uptime-sentinel
+spec:
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: uptime-sentinel
+      app.kubernetes.io/component: worker
+      app.kubernetes.io/part-of: uptime-sentinel
+  podMetricsEndpoints:
+    - port: metrics
+      path: /metrics
+      interval: 15s
+      scrapeTimeout: 10s

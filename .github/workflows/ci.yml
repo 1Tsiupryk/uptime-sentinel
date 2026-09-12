@@ -129,8 +129,10 @@ jobs:
         with:
           version: 'v4.3.0'
 
-      - name: Validate deploy script
-        run: bash -n scripts/deploy-local.sh
+      - name: Validate deploy scripts
+        run: |
+          bash -n scripts/deploy-local.sh
+          bash -n scripts/deploy-monitoring.sh
 
       - name: Prepare test .env
         run: cp infra/kubernetes/overlays/local/infrastructure/.env.example infra/kubernetes/overlays/local/infrastructure/.env
@@ -143,6 +145,8 @@ jobs:
           kubectl kustomize infra/kubernetes/overlays/local/infrastructure >/dev/null
           kubectl kustomize infra/kubernetes/overlays/local/migration >/dev/null
           kubectl kustomize infra/kubernetes/overlays/local/application >/dev/null
+          kubectl kustomize infra/kubernetes/monitoring >/dev/null
+          kubectl kustomize infra/grafana/dashboards >/dev/null
 
       - name: Validate Traefik values
         run: |
@@ -151,4 +155,13 @@ jobs:
             --version 41.5.0 \
             --namespace traefik \
             --values infra/kubernetes/traefik/values.yml \
+            >/dev/null
+
+      - name: Validate monitoring values
+        run: |
+          helm repo add prometheus-community https://prometheus-community.github.io/helm-charts
+          helm template monitoring prometheus-community/kube-prometheus-stack \
+            --version 88.0.1 \
+            --namespace monitoring \
+            --values infra/kubernetes/monitoring/values.yml \
             >/dev/null
