@@ -83,7 +83,8 @@ The dashboard polls the API every 10 seconds to refresh active incident counters
 uptime-sentinel/
 ├── .github/
 │   └── workflows/
-│       └── ci.yml                         # Tests, builds, and infrastructure validation
+│       ├── ci.yml                         # Tests, builds, and infrastructure validation
+│       └── release.yml                    # Publishes versioned images to GHCR
 ├── backend/
 │   ├── alembic/
 │   │   └── versions/                      # Database migrations
@@ -130,12 +131,14 @@ uptime-sentinel/
 │       │   └── migration/                 # Alembic migration Job
 │       ├── monitoring/                    # Helm values, ServiceMonitor, and PodMonitor
 │       ├── overlays/
-│       │   └── local/                     # Local Kind image and secret configuration
+│       │   ├── local/                     # Local Kind image and secret configuration
+│       │   └── production/                # Immutable GHCR image configuration
 │       └── traefik/
 │           └── values.yml
 ├── scripts/
 │   ├── deploy-local.sh                    # Staged Kubernetes application deployment
-│   └── deploy-monitoring.sh               # Prometheus and Grafana deployment
+│   ├── deploy-monitoring.sh               # Prometheus and Grafana deployment
+│   └── deploy-production.sh               # Staged production Kubernetes deployment
 ├── .gitignore
 ├── pyrefly.toml
 └── README.md
@@ -243,7 +246,7 @@ kind load docker-image uptime-sentinel-frontend:local \
 ./scripts/deploy-local.sh
 ```
 
-The script deploys PostgreSQL and Redis, runs Alembic migrations, and then rolls out the backend, workers, frontend, Gateway, and HTTPRoute.
+The script deploys infrastructure, runs database migrations, and rolls out the application using locally built images loaded into the Kind cluster.
 
 Access the application through Traefik:
 
@@ -252,6 +255,30 @@ kubectl port-forward -n traefik service/traefik 8080:80
 ```
 
 Open <http://localhost:8080>.
+
+### Production-like deployment with GHCR
+
+Release images are published to:
+
+- `ghcr.io/1tsiupryk/uptime-sentinel-backend`
+- `ghcr.io/1tsiupryk/uptime-sentinel-frontend`
+
+Production overlays use immutable image tags generated from the Git commit SHA.
+
+Configure credentials:
+
+```bash
+cp infra/kubernetes/overlays/production/infrastructure/.env.example \
+  infra/kubernetes/overlays/production/infrastructure/.env
+```
+
+Deploy to the selected Kubernetes context:
+
+```bash
+KUBE_CONTEXT=kind-uptime-sentinel ./scripts/deploy-production.sh
+```
+
+The script deploys infrastructure, runs database migrations, and rolls out the application using images from GHCR. It expects the Kubernetes cluster, Gateway API, and Traefik to already be installed.
 
 ## API
 
@@ -387,14 +414,11 @@ GitHub Actions runs the following checks on every push and pull request to `main
 - Frontend linting, tests, and production build
 - Backend and frontend Docker image builds
 - Docker Compose configuration validation
-- Kubernetes Kustomize manifest validation
+- Kubernetes base, local, production, and monitoring manifest validation
 - Traefik and kube-prometheus-stack Helm rendering
-- Local deployment script syntax validation
+- Local, production, and monitoring deployment script syntax validation
 
-## Roadmap
-
-- Ansible server bootstrap
-- Operational runbooks
+Version tags matching `v*.*.*` trigger the release workflow, which publishes versioned backend and frontend images to GitHub Container Registry.
 
 ## Security Notes
 
