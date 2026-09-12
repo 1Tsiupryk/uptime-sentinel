@@ -35,6 +35,7 @@ spec:
               drop:
                 - ALL
             readOnlyRootFilesystem: true
+            runAsNonRoot: true
 
           command:
             - python

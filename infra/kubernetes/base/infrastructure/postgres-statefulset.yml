@@ -27,6 +27,11 @@ spec:
       securityContext:
         seccompProfile:
           type: RuntimeDefault
+        runAsNonRoot: true
+        runAsUser: 70
+        runAsGroup: 70
+        fsGroup: 70
+        fsGroupChangePolicy: OnRootMismatch
       containers:
         - name: postgres
           image: postgres:17-alpine
@@ -34,6 +39,13 @@ spec:
             - name: postgres
               containerPort: 5432
               protocol: TCP
+
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+                - ALL
+
           envFrom:
             - secretRef:
                 name: postgres-credentials

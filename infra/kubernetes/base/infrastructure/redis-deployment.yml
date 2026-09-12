@@ -32,6 +32,16 @@ spec:
             - name: redis
               containerPort: 6379
               protocol: TCP
+
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 999
+            runAsGroup: 1000
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+                - ALL
+
           readinessProbe:
             exec:
               command:
