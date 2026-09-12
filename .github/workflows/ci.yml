@@ -133,9 +133,12 @@ jobs:
         run: |
           bash -n scripts/deploy-local.sh
           bash -n scripts/deploy-monitoring.sh
+          bash -n scripts/deploy-production.sh
 
       - name: Prepare test .env
-        run: cp infra/kubernetes/overlays/local/infrastructure/.env.example infra/kubernetes/overlays/local/infrastructure/.env
+        run: |
+          cp infra/kubernetes/overlays/local/infrastructure/.env.example infra/kubernetes/overlays/local/infrastructure/.env
+          cp infra/kubernetes/overlays/production/infrastructure/.env.example infra/kubernetes/overlays/production/infrastructure/.env
 
       - name: Validate Kustomize configuration
         run: |
@@ -145,6 +148,9 @@ jobs:
           kubectl kustomize infra/kubernetes/overlays/local/infrastructure >/dev/null
           kubectl kustomize infra/kubernetes/overlays/local/migration >/dev/null
           kubectl kustomize infra/kubernetes/overlays/local/application >/dev/null
+          kubectl kustomize infra/kubernetes/overlays/production/infrastructure >/dev/null
+          kubectl kustomize infra/kubernetes/overlays/production/migration >/dev/null
+          kubectl kustomize infra/kubernetes/overlays/production/application >/dev/null
           kubectl kustomize infra/kubernetes/monitoring >/dev/null
           kubectl kustomize infra/grafana/dashboards >/dev/null
 
